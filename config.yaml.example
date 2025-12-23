@@ -3,6 +3,15 @@
 openai:
   api_key: "sk-proj-YOUR_API_KEY_HERE"
 
+# 스톡 사이트 업로드 계정
+upload:
+  adobe:
+    email: "your-email@example.com"
+    password: "your-password"
+  freepik:
+    email: "your-email@example.com"
+    password: "your-password"
+
 # 이미지 생성 설정
 image:
   model: "dall-e-3"           # dall-e-3 또는 dall-e-2

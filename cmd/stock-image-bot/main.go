@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Song-wh/stock-image-bot/internal/uploader"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,6 +29,17 @@ type Config struct {
 		Directory string `yaml:"directory"`
 	} `yaml:"output"`
 	Categories []Category `yaml:"categories"`
+	// 업로드 계정 설정
+	Upload struct {
+		Adobe struct {
+			Email    string `yaml:"email"`
+			Password string `yaml:"password"`
+		} `yaml:"adobe"`
+		Freepik struct {
+			Email    string `yaml:"email"`
+			Password string `yaml:"password"`
+		} `yaml:"freepik"`
+	} `yaml:"upload"`
 }
 
 // Category 카테고리
@@ -63,6 +75,39 @@ type ChatResponse struct {
 }
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "upload":
+			handleUpload()
+			return
+		case "upload-adobe":
+			handleAdobeUpload()
+			return
+		case "upload-freepik":
+			handleFreepikUpload()
+			return
+		case "--help", "-h":
+			printHelp()
+			return
+		}
+	}
+
+	// 기본: 이미지 생성
+	handleGenerate()
+}
+
+func printHelp() {
+	fmt.Println(`🖼️  AI 스톡 이미지 생성 봇
+
+사용법:
+  stock-image-bot              이미지 생성 (전체)
+  stock-image-bot --test       테스트 (1장만)
+  stock-image-bot upload       Adobe Stock + Freepik 업로드
+  stock-image-bot upload-adobe Adobe Stock만 업로드
+  stock-image-bot upload-freepik Freepik만 업로드`)
+}
+
+func handleGenerate() {
 	fmt.Println("🖼️  AI 스톡 이미지 생성 봇")
 	fmt.Println("══════════════════════════════════════════")
 
@@ -126,6 +171,103 @@ func main() {
 	fmt.Printf("  💰 예상 비용: $%.2f (약 %d원)\n", totalCost, int(totalCost*1300))
 	fmt.Printf("  📂 저장 위치: %s\n", outputDir)
 	fmt.Println("\n✨ 완료!")
+}
+
+func handleUpload() {
+	fmt.Println("📤 스톡 사이트 업로드")
+	fmt.Println("══════════════════════════════════════════")
+
+	handleAdobeUpload()
+	fmt.Println()
+	handleFreepikUpload()
+}
+
+func handleAdobeUpload() {
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("❌ 설정 로드 실패: %v\n", err)
+		return
+	}
+
+	if config.Upload.Adobe.Email == "" {
+		fmt.Println("⚠️  Adobe Stock 계정 미설정 - 건너뜀")
+		return
+	}
+
+	fmt.Println("\n🅰️  Adobe Stock 업로드")
+	fmt.Println("────────────────────────────────────────")
+
+	adobe := uploader.NewAdobeUploader(
+		config.Upload.Adobe.Email,
+		config.Upload.Adobe.Password,
+	)
+
+	if err := adobe.Connect(); err != nil {
+		fmt.Printf("❌ 브라우저 연결 실패: %v\n", err)
+		return
+	}
+	defer adobe.Close()
+
+	if err := adobe.Login(); err != nil {
+		fmt.Printf("❌ 로그인 실패: %v\n", err)
+		return
+	}
+
+	outputDir := config.Output.Directory
+	if outputDir == "" {
+		outputDir = "./generated_images"
+	}
+
+	if err := adobe.UploadImages(outputDir); err != nil {
+		fmt.Printf("❌ 업로드 실패: %v\n", err)
+		return
+	}
+
+	fmt.Println("✅ Adobe Stock 업로드 완료!")
+}
+
+func handleFreepikUpload() {
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("❌ 설정 로드 실패: %v\n", err)
+		return
+	}
+
+	if config.Upload.Freepik.Email == "" {
+		fmt.Println("⚠️  Freepik 계정 미설정 - 건너뜀")
+		return
+	}
+
+	fmt.Println("\n🆓 Freepik 업로드")
+	fmt.Println("────────────────────────────────────────")
+
+	freepik := uploader.NewFreepikUploader(
+		config.Upload.Freepik.Email,
+		config.Upload.Freepik.Password,
+	)
+
+	if err := freepik.Connect(); err != nil {
+		fmt.Printf("❌ 브라우저 연결 실패: %v\n", err)
+		return
+	}
+	defer freepik.Close()
+
+	if err := freepik.Login(); err != nil {
+		fmt.Printf("❌ 로그인 실패: %v\n", err)
+		return
+	}
+
+	outputDir := config.Output.Directory
+	if outputDir == "" {
+		outputDir = "./generated_images"
+	}
+
+	if err := freepik.UploadImages(outputDir); err != nil {
+		fmt.Printf("❌ 업로드 실패: %v\n", err)
+		return
+	}
+
+	fmt.Println("✅ Freepik 업로드 완료!")
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -337,4 +479,3 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen] + "..."
 }
-
