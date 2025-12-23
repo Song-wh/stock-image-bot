@@ -1,0 +1,54 @@
+# AI 스톡 이미지 생성 봇 설정
+
+openai:
+  api_key: "sk-proj-YOUR_API_KEY_HERE"
+
+# 이미지 생성 설정
+image:
+  model: "dall-e-3"           # dall-e-3 또는 dall-e-2
+  size: "1024x1024"           # 1024x1024, 1024x1792, 1792x1024
+  quality: "standard"         # standard ($0.04) 또는 hd ($0.08)
+  style: "natural"            # natural 또는 vivid
+
+# 저장 경로
+output:
+  directory: "./generated_images"
+  
+# 카테고리별 프롬프트 설정
+categories:
+  - name: "business"
+    count: 5
+    prompts:
+      - "Professional business meeting in modern office, diverse team collaborating, clean minimal style, stock photo quality"
+      - "Handshake between business partners, corporate setting, professional lighting, commercial use"
+      - "Modern workspace with laptop and coffee, minimalist desk setup, bright natural light"
+      - "Team brainstorming session with sticky notes on glass wall, creative office environment"
+      - "Business presentation with charts and graphs, professional speaker, engaged audience"
+      
+  - name: "technology"
+    count: 5
+    prompts:
+      - "Futuristic AI concept with glowing neural network, blue and purple tones, abstract digital art"
+      - "Modern smartphone on marble surface, minimalist product photography, soft shadows"
+      - "Clean server room with blue LED lights, data center aesthetic, symmetrical composition"
+      - "Programmer coding on multiple monitors, atmospheric lighting, focused work environment"
+      - "Robot hand touching human hand, AI and humanity concept, dramatic lighting"
+      
+  - name: "lifestyle"
+    count: 5
+    prompts:
+      - "Cozy coffee shop interior, warm lighting, people working on laptops, hygge aesthetic"
+      - "Healthy breakfast spread on wooden table, fresh fruits and smoothie, morning light"
+      - "Yoga session at sunrise, peaceful beach setting, silhouette style, wellness concept"
+      - "Modern home interior with plants, Scandinavian design, natural light through windows"
+      - "Friends laughing at outdoor cafe, summer vibes, candid moment, lifestyle photography"
+      
+  - name: "nature"
+    count: 5
+    prompts:
+      - "Majestic mountain landscape at golden hour, dramatic clouds, epic scenery, travel photography"
+      - "Serene lake reflection with autumn trees, peaceful morning mist, symmetrical composition"
+      - "Tropical beach with crystal clear water, palm trees, paradise vacation destination"
+      - "Dense forest path with sunlight streaming through trees, magical atmosphere"
+      - "Dramatic ocean waves crashing on rocks, stormy sky, powerful nature photography"
+
