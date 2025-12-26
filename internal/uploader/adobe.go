@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/input"
 )
 
 // AdobeUploader Adobe Stock 업로더
 type AdobeUploader struct {
-	browser *rod.Browser
-	email   string
+	browser  *rod.Browser
+	page     *rod.Page
+	email    string
 	password string
 }
 
@@ -41,7 +42,7 @@ func (a *AdobeUploader) Connect() error {
 	u := launcher.New().
 		Bin(path).
 		Leakless(false).
-		Headless(false). // 디버깅용 - 나중에 true로 변경
+		Headless(false).
 		MustLaunch()
 
 	a.browser = rod.New().ControlURL(u).MustConnect()
@@ -57,148 +58,136 @@ func (a *AdobeUploader) Close() {
 
 // Login Adobe 계정 로그인
 func (a *AdobeUploader) Login() error {
-	page := a.browser.MustPage("https://stock.adobe.com/contributor")
-	page.MustWaitLoad()
+	fmt.Println("🔐 Adobe 로그인 중...")
+
+	a.page = a.browser.MustPage("https://contributor.stock.adobe.com/")
+	a.page.MustWaitLoad()
 	time.Sleep(3 * time.Second)
 
-	// Sign In 버튼 클릭
-	signInBtn := page.MustElement("a[data-t='header-sign-in']")
-	if signInBtn != nil {
-		signInBtn.MustClick()
-		time.Sleep(2 * time.Second)
+	// "Link my Adobe ID" 또는 "Sign in" 버튼 클릭
+	fmt.Println("  🔍 로그인 버튼 찾는 중...")
+
+	// 방법 1: Link my Adobe ID 버튼
+	linkBtn := a.page.MustElement("a.spectrum-Button--cta, a[href*='adobe'], button.spectrum-Button--cta")
+	if linkBtn != nil {
+		linkBtn.MustClick()
+		fmt.Println("  ✅ 로그인 버튼 클릭")
 	}
 
+	time.Sleep(3 * time.Second)
+	a.page.MustWaitLoad()
+
+	// 이메일 입력 페이지 대기
+	fmt.Println("  ⏳ 로그인 페이지 로딩...")
+	time.Sleep(3 * time.Second)
+
 	// 이메일 입력
-	page.MustWaitLoad()
-	time.Sleep(2 * time.Second)
-	
-	emailInput := page.MustElement("input[name='username']")
-	emailInput.MustInput(a.email)
-	
-	// Continue 버튼
-	page.MustElement("button[data-id='EmailPage-ContinueButton']").MustClick()
-	time.Sleep(2 * time.Second)
+	fmt.Println("  📧 이메일 입력 중...")
+	a.page.MustElement("input[name='username'], input[type='email'], #EmailPage-EmailField").MustInput(a.email)
+	time.Sleep(1 * time.Second)
+
+	// Continue 버튼 클릭
+	a.page.MustElement("button[type='submit'], button[data-id='EmailPage-ContinueButton']").MustClick()
+	fmt.Println("  ✅ 이메일 제출")
+	time.Sleep(3 * time.Second)
 
 	// 비밀번호 입력
-	pwInput := page.MustElement("input[name='password']")
-	pwInput.MustInput(a.password)
+	fmt.Println("  🔑 비밀번호 입력 중...")
+	a.page.MustElement("input[name='password'], input[type='password']").MustInput(a.password)
+	time.Sleep(1 * time.Second)
 
-	// Login 버튼
-	page.MustElement("button[data-id='PasswordPage-ContinueButton']").MustClick()
+	// 로그인 버튼 클릭
+	a.page.MustElement("button[type='submit'], button[data-id='PasswordPage-ContinueButton']").MustClick()
+	fmt.Println("  ✅ 로그인 제출")
 	time.Sleep(5 * time.Second)
 
-	fmt.Println("✅ Adobe Stock 로그인 완료")
+	fmt.Println("✅ Adobe Stock 로그인 완료!")
 	return nil
 }
 
 // UploadImages 이미지 업로드
 func (a *AdobeUploader) UploadImages(imageDir string) error {
-	page := a.browser.MustPage("https://contributor.stock.adobe.com/uploads")
-	page.MustWaitLoad()
-	time.Sleep(3 * time.Second)
+	fmt.Println("\n📤 이미지 업로드 시작...")
+
+	// 업로드 페이지로 이동
+	a.page.MustNavigate("https://contributor.stock.adobe.com/ko/uploads")
+	a.page.MustWaitLoad()
+	time.Sleep(5 * time.Second)
 
 	// 이미지 파일 찾기
-	files, err := findImages(imageDir)
+	files, err := findJPEGImages(imageDir)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("📤 %d개 이미지 업로드 시작\n", len(files))
+	if len(files) == 0 {
+		return fmt.Errorf("업로드할 이미지가 없습니다")
+	}
 
-	for i, file := range files {
-		fmt.Printf("\n[%d/%d] %s\n", i+1, len(files), filepath.Base(file))
+	fmt.Printf("📂 %d개 이미지 발견\n", len(files))
 
-		// 메타데이터 로드
-		meta, err := loadMetadata(file)
+	// 파일 업로드
+	fmt.Println("  📤 파일 업로드 중...")
+	uploadInput := a.page.MustElement("input[type='file']")
+	uploadInput.MustSetFiles(files...)
+
+	// 업로드 완료 대기
+	waitTime := time.Duration(len(files)*15) * time.Second
+	fmt.Printf("  ⏳ 업로드 대기 중... (최대 %v)\n", waitTime)
+	time.Sleep(waitTime)
+
+	fmt.Println("\n✅ 업로드 완료!")
+	fmt.Println("💡 브라우저에서 메타데이터 확인 후 'Submit' 버튼을 클릭하세요.")
+	fmt.Println("\n⏳ 60초 후 브라우저가 닫힙니다. 그 전에 제출하세요!")
+	time.Sleep(60 * time.Second)
+
+	return nil
+}
+
+// findJPEGImages JPEG 이미지 찾기
+func findJPEGImages(dir string) ([]string, error) {
+	var files []string
+
+	// _upscaled_jpeg 폴더 우선 확인
+	jpegDir := strings.TrimSuffix(dir, "/") + "_upscaled_jpeg"
+	if _, err := os.Stat(jpegDir); err == nil {
+		dir = jpegDir
+	} else {
+		// _jpeg 폴더 확인
+		jpegDir = dir + "_jpeg"
+		if _, err := os.Stat(jpegDir); err == nil {
+			dir = jpegDir
+		}
+	}
+
+	fmt.Printf("  📂 이미지 폴더: %s\n", dir)
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Printf("  ⚠️ 메타데이터 없음, 기본값 사용\n")
-			meta = defaultMeta(file)
+			return err
 		}
-
-		// 파일 업로드
-		uploadInput := page.MustElement("input[type='file']")
-		uploadInput.MustSetFiles(file)
-		time.Sleep(5 * time.Second)
-
-		// 업로드 완료 대기
-		fmt.Println("  ⏳ 업로드 중...")
-		time.Sleep(10 * time.Second)
-
-		// 메타데이터 입력을 위해 이미지 클릭
-		page.MustWaitLoad()
-		
-		// 최근 업로드된 이미지 선택
-		imgs := page.MustElements(".upload-item")
-		if len(imgs) > 0 {
-			imgs[0].MustClick()
-			time.Sleep(2 * time.Second)
-
-			// 제목 입력
-			if titleInput, err := page.Element("input[name='title']"); err == nil && titleInput != nil {
-				titleInput.MustSelectAllText().MustInput(meta.Title)
-			}
-
-			// 설명 입력
-			if descInput, err := page.Element("textarea[name='description']"); err == nil && descInput != nil {
-				descInput.MustSelectAllText().MustInput(meta.Description)
-			}
-
-			// 키워드 입력
-			if keywordInput, err := page.Element("input[name='keywords']"); err == nil && keywordInput != nil {
-				for _, kw := range meta.Keywords {
-					keywordInput.MustInput(kw)
-					keywordInput.MustType(input.Comma)
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-
-			// 저장
-			if saveBtn, err := page.Element("button[type='submit']"); err == nil && saveBtn != nil {
-				saveBtn.MustClick()
-				time.Sleep(2 * time.Second)
+		if !info.IsDir() {
+			ext := strings.ToLower(filepath.Ext(path))
+			if ext == ".jpg" || ext == ".jpeg" {
+				files = append(files, path)
 			}
 		}
-
-		fmt.Println("  ✅ 업로드 완료")
-		time.Sleep(2 * time.Second)
-	}
-
-	return nil
+		return nil
+	})
+	return files, err
 }
 
-// SubmitForReview 심사 제출
-func (a *AdobeUploader) SubmitForReview() error {
-	page := a.browser.MustPage("https://contributor.stock.adobe.com/uploads")
-	page.MustWaitLoad()
-	time.Sleep(3 * time.Second)
-
-	// 모든 이미지 선택
-	selectAll := page.MustElement("input[type='checkbox'][name='select-all']")
-	if selectAll != nil {
-		selectAll.MustClick()
-		time.Sleep(1 * time.Second)
-	}
-
-	// Submit 버튼 클릭
-	submitBtn := page.MustElement("button[data-action='submit']")
-	if submitBtn != nil {
-		submitBtn.MustClick()
-		time.Sleep(2 * time.Second)
-	}
-
-	fmt.Println("✅ 심사 제출 완료")
-	return nil
-}
-
-// 유틸리티 함수들
 func findImages(dir string) ([]string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && (filepath.Ext(path) == ".png" || filepath.Ext(path) == ".jpg") {
-			files = append(files, path)
+		if !info.IsDir() {
+			ext := strings.ToLower(filepath.Ext(path))
+			if ext == ".png" || ext == ".jpg" || ext == ".jpeg" {
+				files = append(files, path)
+			}
 		}
 		return nil
 	})
@@ -206,7 +195,9 @@ func findImages(dir string) ([]string, error) {
 }
 
 func loadMetadata(imagePath string) (*ImageMetadata, error) {
-	metaPath := imagePath[:len(imagePath)-4] + ".json"
+	base := strings.TrimSuffix(imagePath, filepath.Ext(imagePath))
+	metaPath := base + ".json"
+
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
 		return nil, err
@@ -228,3 +219,9 @@ func defaultMeta(imagePath string) *ImageMetadata {
 	}
 }
 
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}

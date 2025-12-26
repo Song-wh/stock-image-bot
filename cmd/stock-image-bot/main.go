@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Song-wh/stock-image-bot/internal/uploader"
+	"github.com/Song-wh/stock-image-bot/internal/upscaler"
 	"gopkg.in/yaml.v3"
 )
 
@@ -86,6 +87,12 @@ func main() {
 		case "upload-freepik":
 			handleFreepikUpload()
 			return
+		case "upscale":
+			handleUpscale()
+			return
+		case "convert-jpeg":
+			handleConvertJPEG()
+			return
 		case "--help", "-h":
 			printHelp()
 			return
@@ -102,9 +109,76 @@ func printHelp() {
 사용법:
   stock-image-bot              이미지 생성 (전체)
   stock-image-bot --test       테스트 (1장만)
+  stock-image-bot upscale      이미지 4배 확대 (1024→4096)
+  stock-image-bot convert-jpeg PNG→JPG 변환 (Freepik용)
   stock-image-bot upload       Adobe Stock + Freepik 업로드
   stock-image-bot upload-adobe Adobe Stock만 업로드
   stock-image-bot upload-freepik Freepik만 업로드`)
+}
+
+func handleConvertJPEG() {
+	fmt.Println("🔄 PNG → JPEG 변환")
+	fmt.Println("══════════════════════════════════════════")
+
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("❌ 설정 로드 실패: %v\n", err)
+		return
+	}
+
+	// 업스케일된 이미지가 있으면 그것을 사용
+	inputDir := config.Output.Directory + "_upscaled"
+	if _, err := os.Stat(inputDir); os.IsNotExist(err) {
+		inputDir = config.Output.Directory
+		if inputDir == "" {
+			inputDir = "./generated_images"
+		}
+	}
+	outputDir := inputDir + "_jpeg"
+
+	fmt.Printf("📂 입력: %s\n", inputDir)
+	fmt.Printf("📂 출력: %s\n", outputDir)
+
+	if err := upscaler.ConvertToJPEG(inputDir, outputDir); err != nil {
+		fmt.Printf("❌ 변환 실패: %v\n", err)
+		return
+	}
+
+	fmt.Println("\n══════════════════════════════════════════")
+	fmt.Println("✅ JPEG 변환 완료!")
+	fmt.Printf("📂 결과 위치: %s\n", outputDir)
+	fmt.Println("\n💡 이 폴더의 .jpg 파일을 Freepik에 업로드하세요!")
+}
+
+func handleUpscale() {
+	fmt.Println("🔍 이미지 업스케일 (4배 확대)")
+	fmt.Println("══════════════════════════════════════════")
+
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("❌ 설정 로드 실패: %v\n", err)
+		return
+	}
+
+	inputDir := config.Output.Directory
+	if inputDir == "" {
+		inputDir = "./generated_images"
+	}
+	outputDir := inputDir + "_upscaled"
+
+	fmt.Printf("📂 입력: %s\n", inputDir)
+	fmt.Printf("📂 출력: %s\n", outputDir)
+
+	up := upscaler.NewUpscaler(4) // 4배 확대
+	if err := up.UpscaleDirectory(inputDir, outputDir); err != nil {
+		fmt.Printf("❌ 업스케일 실패: %v\n", err)
+		return
+	}
+
+	fmt.Println("\n══════════════════════════════════════════")
+	fmt.Println("✅ 업스케일 완료!")
+	fmt.Printf("📂 결과 위치: %s\n", outputDir)
+	fmt.Println("\n💡 Freepik 업로드시 이 폴더의 이미지를 사용하세요!")
 }
 
 func handleGenerate() {
